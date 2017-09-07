@@ -4,4 +4,11 @@ Discrimantive Bag-of-Nuclear-Words (DBoNW) is a machine learning tool for predic
 
 The code for the algorithm is contained in the folder 'DBoW', which is a more general machine learning tool for learning discrimantive bag-of-word representations of data. 
 
-See 'example.py' for instructions of how to run the code.
+## Diagnosing Basal Subtype in TCGA-BRCA Patients
+
+See 'example\_predict\_script.py' for an example python script that predicts the subtype (Basal or non-Basal) of a sample TCGA-BRCA patient.
+
+The necessary sample data is available here:
+http://www.andrew.cmu.edu/user/bchidest/software/
+
+Copy the extracted folder 'DBONW\_sample\_data' into the root directory ('DBoNW').
