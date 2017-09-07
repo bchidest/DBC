@@ -1,0 +1,5 @@
+*.pyc
+
+DBoNW_sample_data/*
+
+TODO.txt

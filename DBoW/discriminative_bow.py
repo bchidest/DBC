@@ -49,7 +49,6 @@ def bow_classifier(bow, n_classes, n_codewords, n_nodes):
     biases = tf.get_variable('fc_biases', [n_nodes],
                              initializer=tf.constant_initializer(0.0))
     variable_summaries(biases, 'fc_biases')
-    post_weights = tf.matmul(bow, weights)
     bow_hidden = tf.nn.relu(tf.matmul(bow, weights) + biases)
     tf.summary.histogram('fc_activations', bow_hidden)
 
@@ -61,7 +60,7 @@ def bow_classifier(bow, n_classes, n_codewords, n_nodes):
     variable_summaries(biases, 'output_biases')
     y = tf.matmul(bow_hidden, weights) + biases
     tf.summary.histogram('output_activations', y)
-    return y, bow_hidden, post_weights
+    return y
 
 
 def bow_classifier_simple_2_class(bow):

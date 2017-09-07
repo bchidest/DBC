@@ -4,111 +4,11 @@ from glob import glob
 import pandas as pd
 import random
 import sys
+import time
 
 sys.path.append(os.path.abspath("./DBoW/"))
 
 import bow_dataset
-
-#
-#
-#class DataSet(object):
-#
-#    def __init__(self, data_dir, object_features, labels, pids,
-#                 feature_names, balance_classes):
-#        """Construct a DataSet.
-#        one_hot arg is used only if fake_data is true.  `dtype` can be either
-#        `uint8` to leave the input as `[0, 255]`, or `float32` to rescale into
-#        `[0, 1]`.
-#        Load_chunk -> how many steps' data to preload during training. Preferred between 10 and 30.
-#        """
-#        self.data_dir = data_dir
-#        self.object_features = object_features
-#        self.labels = labels
-#        self.pids = pids
-#        self.feature_names = feature_names
-#        self.n_features = len(feature_names)
-#        self.balance_classes = balance_classes
-#
-#        self.epochs_completed = -1
-#        self.index_in_epoch = np.inf
-#        self.index_in_no_repeats = np.inf
-#        self.num_in_epoch = 0
-#        self.num_examples = len(object_features)
-#
-#        self.max_n_objects = 0
-#        for i in range(self.num_examples):
-#            if object_features[i].shape[0] > self.max_n_objects:
-#                self.max_n_objects = object_features[i].shape[0]
-#
-#        self.labels_list = list(set(labels))
-#        self.n_labels = len(self.labels_list)
-#        self.n_samples_per_label = [np.sum(labels == l) for l in self.labels_list]
-#        self.ind_max_label = np.argmax(np.array(self.n_samples_per_label))
-#        self.max_n_samples = self.n_samples_per_label[self.ind_max_label]
-#        self.num_examples_in_epoch = self.max_n_samples*self.n_labels
-#        self.n_repeats = [self.max_n_samples / n for n in self.n_samples_per_label]
-#        self.n_remainder = [self.max_n_samples % n for n in self.n_samples_per_label]
-#        self.ind = [list(np.where(labels == l)[0]) for l in self.labels_list]
-#
-#        self.perm = []
-#        self.shuffle_data()
-#
-#    #@property
-#    #def num_examples(self):
-#    #    return self.num_examples
-#
-#    #@property
-#    #def epochs_completed(self):
-#    #    return self.epochs_completed
-#
-#    def shuffle_data(self):
-#        self.perm = []
-#        for i in range(self.n_labels):
-#            self.perm += self.ind[i]*self.n_repeats[i]
-#            self.perm += random.sample(self.ind[i], self.n_remainder[i])
-#        random.shuffle(self.perm)
-#
-#    def reset_epoch(self):
-#        self.index_in_epoch = np.inf
-#        #self.shuffle_data()
-#
-#    def reset_no_repeats(self):
-#        self.index_in_no_repeats = np.inf
-#
-#    def next_batch(self, batch_size):
-#
-#        """Return the next `batch_size` examples from this data set."""
-#
-#        start = self.index_in_epoch
-#        self.index_in_epoch += batch_size
-#        self.num_in_epoch += 1
-#
-#        # Finished epoch
-#        if self.index_in_epoch > self.num_examples_in_epoch:
-#            self.shuffle_data()
-#            self.epochs_completed += 1
-#            self.index_in_epoch = batch_size
-#            # Shuffle the data
-#            start = 0
-#        end = self.index_in_epoch
-#        samples = [self.object_features[self.perm[i]] for i in range(start, end)]
-#        labels = [self.labels[self.perm[i]] for i in range(start, end)]
-#        return samples, labels
-#
-#    def next_batch_no_repeats(self, batch_size):
-#        start = self.index_in_no_repeats
-#        self.index_in_no_repeats += batch_size
-#
-#        # Processed all samples
-#        if self.index_in_no_repeats > self.num_examples:
-#            self.index_in_no_repeats = batch_size
-#            # Shuffle the data
-#            start = 0
-#        end = self.index_in_no_repeats
-#        samples = [self.object_features[i] for i in range(start, end)]
-#        labels = [self.labels[i] for i in range(start, end)]
-#        return samples, labels
-#
 
 
 def load_feature_list_file(feature_list_file):
@@ -173,21 +73,66 @@ def preprocess_data_sets(data_orig_dir, data_processed_dir, feature_list_file,
         temp.to_csv(os.path.join(data_processed_dir, temp_basename), index=False)
 
 
-def read_data_sets(data_dir, label='TP53', label_type='mutation', percent_train=0.5,
+def normalize_features(features, feature_mean, feature_var):
+    return (features - feature_mean)/(2*np.sqrt(feature_var)) + 0.5
+
+
+def read_sample(data_dir, sample_filename, reference_data_set=[],
+                label='Basal', label_type='subtype', load_label=True):
+    if load_label:
+        if label_type == 'mutation':
+            labels_file = os.path.join(data_dir, "labels.csv")
+            labels_df = pd.read_csv(labels_file, delimiter='\t', index_col=0)
+        elif label_type == 'subtype':
+            labels_file = os.path.join(data_dir, "tcgaSubtype.csv")
+            labels_df = pd.read_csv(labels_file, delimiter=',', index_col=0)
+        if label_type == 'mutation':
+            tcga_pid = os.path.splitext(os.path.split(sample_filename)[1])[0][0:15]
+            tcga_pid = tcga_pid.replace('-', '.')
+        elif label_type == 'subtype':
+            tcga_pid = os.path.splitext(os.path.split(sample_filename)[1])[0][0:12]
+        if tcga_pid in labels_df.index:
+            if label_type == 'mutation':
+                if pd.isnull(labels_df.loc[tcga_pid, label]):
+                    y = 0
+                else:
+                    y = 1
+            elif label_type == 'subtype':
+                if labels_df.loc[tcga_pid, labels_df.columns[0]] == label:
+                    y = 1
+                else:
+                    y = 0
+        else:
+            print('Sample not found in labels file!')
+            return [], []
+    features = pd.read_csv(sample_filename)
+    if reference_data_set:
+        features = features[reference_data_set.feature_names]
+        features = normalize_features(features,
+                                      reference_data_set.feature_mean,
+                                      reference_data_set.feature_var)
+    if load_label:
+        return features, y
+    else:
+        return features
+
+
+def read_data_sets(data_dir, label='Basal', label_type='subtype', percent_train=0.5,
                    percent_validation=0.1, balance_classes=True, min_variance=0.001,
-                   normalize=True):
-    feature_files = glob(os.path.join(data_dir, "features", "*Nuclei.csv"))
-    #feature_files = glob(os.path.join(data_dir, "features", "*Nuclei.csv"))[0:400]
+                   normalize=True, save_data_sets=True, output_dir='./'):
+    # TODO: should remove these checks for different label types and just
+    #       require uniform formatting of label file
+    feature_files = glob(os.path.join(data_dir, "*Nuclei.csv"))
     if label_type == 'mutation':
         labels_file = os.path.join(data_dir, "labels.csv")
-    elif label_type == 'subtype':
-        labels_file = os.path.join(data_dir, "tcgaSubtype.csv")
-
-    # Check that sample is in both labels and features
-    if label_type == 'mutation':
         labels_df = pd.read_csv(labels_file, delimiter='\t', index_col=0)
     elif label_type == 'subtype':
+        labels_file = os.path.join(data_dir, "tcgaSubtype.csv")
         labels_df = pd.read_csv(labels_file, delimiter=',', index_col=0)
+#    if label_type == 'mutation':
+#        labels_df = pd.read_csv(labels_file, delimiter='\t', index_col=0)
+#    elif label_type == 'subtype':
+#        labels_df = pd.read_csv(labels_file, delimiter=',', index_col=0)
     n_samples = len(feature_files)
 
     ind = [[], []]
@@ -255,7 +200,7 @@ def read_data_sets(data_dir, label='TP53', label_type='mutation', percent_train=
         for i in ind[j][0: int(n_samples[j]*percent_train)]:
             temp = pd.read_csv(feature_files[i])
             if normalize:
-                temp = (temp - feature_mean)/(2*np.sqrt(feature_var)) + 0.5
+                temp = normalize_features(temp, feature_mean, feature_var)
 #            if normalize:
 #                temp = (train_samples[i] - feature_mean)/(2*np.sqrt(feature_var)) + 0.5
 #            else:
@@ -273,7 +218,7 @@ def read_data_sets(data_dir, label='TP53', label_type='mutation', percent_train=
             tcga_pids_validation.append(tcga_pid)
             temp = pd.read_csv(feature_files[i])
             if normalize:
-                temp = (temp - feature_mean)/(2*np.sqrt(feature_var)) + 0.5
+                temp = normalize_features(temp, feature_mean, feature_var)
             validation_object_features.append(temp.loc[:, valid_feature_ind].values)
     print("Testing patients:")
     for j in range(len(ind)):
@@ -287,7 +232,7 @@ def read_data_sets(data_dir, label='TP53', label_type='mutation', percent_train=
             tcga_pids_test.append(tcga_pid)
             temp = pd.read_csv(feature_files[i])
             if normalize:
-                temp = (temp - feature_mean)/(2*np.sqrt(feature_var)) + 0.5
+                temp = normalize_features(temp, feature_mean, feature_var)
             test_object_features.append(temp.loc[:, valid_feature_ind].values)
     train_labels_df = labels_df.loc[tcga_pids_train]
     validation_labels_df = labels_df.loc[tcga_pids_validation]
@@ -301,11 +246,42 @@ def read_data_sets(data_dir, label='TP53', label_type='mutation', percent_train=
         validation_labels = (validation_labels_df == label).values.astype('uint8').ravel()
         test_labels = (test_labels_df == label).values.astype('uint8').ravel()
 
-    train_data_set = bow_dataset.BowDataSet(data_dir, train_object_features, train_labels,
+    train_data_set = bow_dataset.DBowDataSet(train_object_features, train_labels,
                              tcga_pids_train, feature_names, balance_classes)
-    validation_data_set = bow_dataset.BowDataSet(data_dir, validation_object_features, validation_labels,
+    validation_data_set = bow_dataset.DBowDataSet(validation_object_features, validation_labels,
                                   tcga_pids_validation, feature_names, balance_classes)
-    test_data_set = bow_dataset.BowDataSet(data_dir, test_object_features, test_labels,
+    test_data_set = bow_dataset.DBowDataSet(test_object_features, test_labels,
                             tcga_pids_test, feature_names, balance_classes)
-    return train_data_set, validation_data_set, test_data_set
 
+    if save_data_sets:
+        # Save the necessary contents for each data set to a pkl file
+        time_str = ''
+        train_filename = os.path.join(output_dir, label + '_train.pkl')
+        # If data set pkl already exists, append time to name of new pkl
+        if os.path.isfile(train_filename):
+            time_str = '_' + str(int(time.time()))
+        train_data_set.save_to_pkl(os.path.join(output_dir, label + '_train_' +
+                                                time_str + '.pkl'))
+        train_data_set.save_without_features_to_pkl(os.path.join(output_dir,
+                                                                 label +
+                                                                 '_train_no_features_'
+                                                                 + time_str + '.pkl'))
+        validation_data_set.save_to_pkl(os.path.join(output_dir, label + '_validation_' +
+                                                     time_str + '.pkl'))
+        test_data_set.save_to_pkl(os.path.join(output_dir, label + '_test_' +
+                                               time_str + '.pkl'))
+#                                     train_object_features,
+#                                     train_labels,
+#                                     tcga_pids_train, feature_names)
+#    bow_dataset.save_data_set_to_pkl(os.path.join(output_dir, label + '_validation_' +
+#                                     time_str + '.pkl'),
+#                                     validation_object_features,
+#                                     validation_labels,
+#                                     tcga_pids_validation, feature_names)
+#    bow_dataset.save_data_set_to_pkl(os.path.join(output_dir, label + '_test_' +
+#                                     time_str + '.pkl'),
+#                                     test_object_features,
+#                                     test_labels,
+#                                     tcga_pids_test, feature_names)
+
+    return train_data_set, validation_data_set, test_data_set

@@ -14,8 +14,7 @@ from datetime import datetime
 import cPickle as pkl
 
 import discriminative_bow as dbow
-from read_nuclei_feature_dataset import read_data_sets
-from read_nuclei_feature_dataset import read_fake_data_sets
+import bow_dataset
 
 
 def fill_feed_dict(data_set, sample_pl, labels_pl, batch_size, zero_pad=0,
@@ -113,26 +112,11 @@ def do_eval(sess,
     return([accuracy, f1, precision, recall, specificity, fpr])
 
 
-def run_training(filename_prefix, model_dir, summary_dir, train_dir,
-                 label='TP53', label_type='mutation', datasets=[],
-                 n_codewords=8, learning_rate=0.00001, max_steps=10000,
-                 batch_size=30, fake_data=False):
-    random.seed(33)
-
-    n_nodes_codeword = [25, 15]
-    n_nodes_bow = 6
-    if fake_data:
-        train, validate, test = read_fake_data_sets()
-    else:
-        if datasets:
-            train, validate, test = datasets
-        else:
-            print("Loading dataset...")
-            train, validate, test = read_data_sets(train_dir, label, label_type)
-            # Save the dataset partitioning for later evaluation
-            dataset_file = open(filename_prefix + '_DataSet.pkl', 'wb')
-            pkl.dump([train, validate, test], dataset_file)
-            dataset_file.close()
+def run_training(filename_prefix, model_dir, summary_dir, train,
+                 validate,
+                 n_codewords=8, n_nodes_codeword=[25, 15], n_nodes_bow=6,
+                 learning_rate=0.001, max_steps=5000,
+                 batch_size=30):
 
     n_features = train.n_features
     print("Number of training patients = ("
@@ -141,9 +125,6 @@ def run_training(filename_prefix, model_dir, summary_dir, train_dir,
     print("Number of validation patients = ("
           + str(validate.n_samples_per_label[0]) + ", "
           + str(validate.n_samples_per_label[1]) + ")")
-    print("Number of testing patients = ("
-          + str(test.n_samples_per_label[0]) + ", "
-          + str(test.n_samples_per_label[1]) + ")")
 
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
@@ -173,7 +154,7 @@ def run_training(filename_prefix, model_dir, summary_dir, train_dir,
             logits = dbow.bow_classifier(bow, train.n_labels,
                                          n_codewords, n_nodes_bow)
             #logits = dbow.bow_classifier_simple_2_class(bow)
-        loss = dbow.loss(logits[0], labels_placeholder)
+        loss = dbow.loss(logits, labels_placeholder)
         train_op = dbow.training(loss, global_step, learning_rate)
 
         saver = tf.train.Saver(max_to_keep=0)
@@ -219,24 +200,22 @@ def run_training(filename_prefix, model_dir, summary_dir, train_dir,
                 # Evaluate against the validation set.
                 print('Train Data Eval:')
                 do_eval(sess,
-                        logits[0],
-                        #logits,
+                        logits,
                         nuclei_placeholder,
                         labels_placeholder,
                         train,
                         batch_size)
-                print("Step: " + str(step) + 'train confusion matrix')
+                print("Step: " + str(step))
             if (step + 1) % 10 == 0 or (step + 1) == max_steps:
                 # Evaluate against the training set.
                 print('Validate Data Eval:')
                 do_eval(sess,
-                        logits[0],
-                        #logits,
+                        logits,
                         nuclei_placeholder,
                         labels_placeholder,
                         validate,
                         batch_size)
-                print("Step: " + str(step) + 'validate confusion matrix')
+                print("Step: " + str(step))
             if (step + 1) % 20 == 0 or (step + 1) == max_steps:
                 saver.save(sess, os.path.join(model_dir, filename_prefix),
                            global_step=step)
@@ -250,15 +229,57 @@ def run_training(filename_prefix, model_dir, summary_dir, train_dir,
                 print("Example BOW:")
                 for i in range(5):
                     print(bow_eval[i], feed_dict[labels_placeholder][i])
-                    print(y[0][i], feed_dict[labels_placeholder][i])
+                    print(y[i], feed_dict[labels_placeholder][i])
+
+
+def predict_samples(model_filename, samples, max_n_objects,
+                    n_codewords=8, n_nodes_codeword=[25, 15],
+                    n_nodes_bow=6,
+                    threshold_offset=0.0,
+                    n_labels=2):
+    '''
+    samples : list of numpy.arrays
+    '''
+    n_samples = len(samples)
+    n_features = samples[0].shape[1]
+
+    with tf.Graph().as_default():
+        nuclei_placeholder = [tf.placeholder(tf.float32) for _ in range(n_samples)]
+        with tf.variable_scope("codeword_network") as scope:
+            codewords1 = dbow.codeword_representation(nuclei_placeholder,
+                                                     0,
+                                                     n_features,
+                                                     n_codewords,
+                                                     n_nodes_codeword)
+            bow = tf.expand_dims(dbow.bow(codewords1), axis=0)
+            scope.reuse_variables()
+            for i in range(1, n_samples):
+                codewords = dbow.codeword_representation(nuclei_placeholder,
+                                                         i,
+                                                         n_features,
+                                                         n_codewords,
+                                                         n_nodes_codeword)
+                bow = tf.concat([bow, tf.expand_dims(dbow.bow(codewords), axis=0)], axis=0)
+        # Normalize BOW by maximum number of objects for any sample
+        bow = bow / float(max_n_objects)
+        with tf.variable_scope("bow_classifier") as scope:
+            logits = dbow.bow_classifier(bow, n_labels,
+                                         n_codewords, n_nodes_bow)
+        saver = tf.train.Saver()
+        sess = tf.Session()
+        saver.restore(sess, model_filename)
+        feed_dict = {tuple(nuclei_placeholder): tuple(samples)}
+        logits_eval = sess.run(logits, feed_dict=feed_dict)
+        y_hat = np.argmax(logits_eval, axis=1)
+        return y_hat
 
 
 def evaluate_on_dataset(model_filename, data_set, max_n_objects,
-                        n_codewords=20, n_nodes_codeword=[50, 30],
-                        n_nodes_bow=10, batch_size=30, repeats=False,
+                        n_codewords=8, n_nodes_codeword=[25, 15],
+                        n_nodes_bow=6, batch_size=30, repeats=False,
                         threshold_offset=0.0):
     n_features = data_set.n_features
-    print("Number of patients = ("
+    print("Number of samples = ("
           + str(data_set.n_samples_per_label[0]) + ", "
           + str(data_set.n_samples_per_label[1]) + ")")
 
@@ -290,8 +311,7 @@ def evaluate_on_dataset(model_filename, data_set, max_n_objects,
         saver.restore(sess, model_filename)
         print('DataSet Eval:')
         return do_eval(sess,
-                       logits[0],
-                       #logits,
+                       logits,
                        nuclei_placeholder,
                        labels_placeholder,
                        data_set,
@@ -301,8 +321,9 @@ def evaluate_on_dataset(model_filename, data_set, max_n_objects,
 
 
 def evaluate_ROC(model_filename, data_set, max_n_objects,
-                 n_codewords=20, n_nodes_codeword=[50, 30],
-                 n_nodes_bow=10, batch_size=30, repeats=False,
+                 output_dir='./',
+                 n_codewords=8, n_nodes_codeword=[25, 15],
+                 n_nodes_bow=6, batch_size=30, repeats=False,
                  thresholds=[-1.0, 0.0, 1.0]):
 
     tpr = [0.0]
@@ -331,13 +352,13 @@ def evaluate_ROC(model_filename, data_set, max_n_objects,
     ax.set_xticklabels([str(t) for t in tick], fontsize=16)
     ax.set_yticklabels([str(t) for t in tick], fontsize=16)
     ax.set_ylabel('True Positive Rate', fontsize=20)
-    fig.savefig('paper/figures/ROC.png')
+    fig.savefig(os.path.join(output_dir, 'ROC.png'))
     fig.clf()
 
 
 def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects,
-                               n_codewords=20, n_nodes_codeword=[50, 30],
-                               n_nodes_bow=10, n_example_nuclei_per_sample=5,
+                               n_codewords=8, n_nodes_codeword=[25, 15],
+                               n_nodes_bow=6, n_example_nuclei_per_sample=5,
                                n_example_nuclei=10, n_example_bow_per_label=5,
                                save_data=False):
     n_features = data_set.n_features
@@ -353,7 +374,6 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
         nuclei_placeholder = [tf.placeholder(tf.float32)]
         labels_placeholder = tf.placeholder(tf.int32)
         with tf.variable_scope("codeword_network") as scope:
-        #    scope.reuse_variables()
             codewords = dbow.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
@@ -388,7 +408,7 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
                 labels_ind[0].append(i)
             else:
                 labels_ind[1].append(i)
-            y_hat[i] = np.argmax(logits_eval[0])
+            y_hat[i] = np.argmax(logits_eval)
     random.shuffle(labels_ind[0])
     random.shuffle(labels_ind[1])
 
@@ -505,7 +525,7 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
 def run_fake_network(batch_size=30):
     random.seed(33)
 
-    train, test = read_fake_data_sets()
+    train, test = bow_dataset.load_fake_data_sets()
     n_features = train.n_features
     print("Number of training patients = ("
           + str(train.n_samples_per_label[0]) + ", "
@@ -539,9 +559,3 @@ def run_fake_network(batch_size=30):
             y = sess.run(logits, feed_dict=feed_dict)
             C = confusion_matrix(feed_dict[labels_placeholder], y)
             print(C)
-#        do_eval(sess,
-#                logits[0],
-#                nuclei_placeholder,
-#                labels_placeholder,
-#                train,
-#                batch_size))
