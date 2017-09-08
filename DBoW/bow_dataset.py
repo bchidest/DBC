@@ -270,10 +270,10 @@ def normalize_features(features, feature_mean, feature_var):
 
 
 def read_sample(sample_filename, labels_file=[], reference_data_set=[],
-                label='Basal'):
+                label='Basal', features_file_suffix=''):
     if labels_file:
         labels_df = pd.read_csv(labels_file, delimiter=',', index_col=0)
-        sample_id = os.path.splitext(os.path.split(sample_filename)[1])[0][0:12]
+        sample_id = (os.path.splitext(os.path.split(sample_filename)[1])[0]).split(features_file_suffix)[0]
         if sample_id in labels_df.index:
             if labels_df.loc[sample_id, labels_df.columns[0]] == label:
                 y = 1
@@ -312,7 +312,7 @@ def read_data_sets(data_dir, labels_file,
 
     ind = [[], []]
     for i in range(n_samples):
-        sample_id = os.path.splitext(os.path.split(feature_files[i])[1])[0][0:12]
+        sample_id = (os.path.splitext(os.path.split(feature_files[i])[1])[0]).split(features_file_suffix)[0]
         if sample_id in labels_df.index:
             if labels_df.loc[sample_id, labels_df.columns[0]] == label:
                 ind[1].append(i)
@@ -344,7 +344,7 @@ def read_data_sets(data_dir, labels_file,
     for j in range(len(ind)):
         n_samples_train += int(n_samples[j]*percent_train)
         for i in ind[j][0: int(n_samples[j]*percent_train)]:
-            sample_id = os.path.splitext(os.path.split(feature_files[i])[1])[0][0:12]
+            sample_id = (os.path.splitext(os.path.split(feature_files[i])[1])[0]).split(features_file_suffix)[0]
             print(sample_id)
             sample_ids_train.append(sample_id)
             temp = pd.read_csv(feature_files[i])
@@ -365,7 +365,7 @@ def read_data_sets(data_dir, labels_file,
     print("Validation patients:")
     for j in range(len(ind)):
         for i in ind[j][int(n_samples[j]*percent_train):int(n_samples[j]*(percent_train + percent_validation))]:
-            sample_id = os.path.splitext(os.path.split(feature_files[i])[1])[0][0:12]
+            sample_id = (os.path.splitext(os.path.split(feature_files[i])[1])[0]).split(features_file_suffix)[0]
             print(sample_id)
             sample_ids_validation.append(sample_id)
             temp = pd.read_csv(feature_files[i])
@@ -375,7 +375,7 @@ def read_data_sets(data_dir, labels_file,
     print("Testing patients:")
     for j in range(len(ind)):
         for i in ind[j][int(n_samples[j]*(percent_train + percent_validation)):]:
-            sample_id = os.path.splitext(os.path.split(feature_files[i])[1])[0][0:12]
+            sample_id = (os.path.splitext(os.path.split(feature_files[i])[1])[0]).split(features_file_suffix)[0]
             print(sample_id)
             sample_ids_test.append(sample_id)
             temp = pd.read_csv(feature_files[i])

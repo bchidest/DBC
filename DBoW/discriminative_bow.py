@@ -37,7 +37,7 @@ def codeword_representation(x, ind, n_features, n_codewords, n_nodes):
 
 
 def bow(c):
-    # Assume c is NxC (N=number of nuclei, C=Number of codewords)
+    # Assume c is NxC (N=number of objects, C=Number of codewords)
     bow = tf.reduce_sum(c, axis=0)
     return bow
 
