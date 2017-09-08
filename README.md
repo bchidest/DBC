@@ -6,7 +6,7 @@ The code for the algorithm is contained in the folder 'DBoW', which is a more ge
 
 ## Diagnosing Basal Subtype in TCGA-BRCA Patients
 
-See 'example\_predict\_script.py' for an example python script that predicts the subtype (Basal or non-Basal) of a sample TCGA-BRCA patient.
+See 'example\_predict\_script.sh' for an example python script that predicts the subtype (Basal or non-Basal) of a sample TCGA-BRCA patient.
 
 The necessary sample data is available here:
 http://www.andrew.cmu.edu/user/bchidest/software/

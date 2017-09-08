@@ -1,12 +1,7 @@
-import sys
-import os
 import argparse
 
-
-sys.path.append(os.path.abspath("../"))
-
-from run_discriminative_bow import evaluate_on_dataset
-import bow_dataset
+from ..run_discriminative_bow import evaluate_on_dataset
+from .. import bow_dataset
 
 
 parser = argparse.ArgumentParser(description='Evaluate a DBoNW model with '

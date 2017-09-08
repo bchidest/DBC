@@ -1,12 +1,7 @@
-import sys
-import os
 import argparse
 
-
-sys.path.append(os.path.abspath("../"))
-
-import dbow_predictor
-import bow_dataset
+from .. import dbow_predictor
+from .. import bow_dataset
 
 
 parser = argparse.ArgumentParser(description='Evaluate a DBoNW model with '
