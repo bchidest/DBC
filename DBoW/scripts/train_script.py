@@ -6,7 +6,7 @@ import argparse
 sys.path.append(os.path.abspath("../"))
 
 from run_discriminative_bow import run_training
-from bow_dataset import load_data_set_from_pkl
+import bow_dataset
 
 
 parser = argparse.ArgumentParser(description='Train a DBoNW model with given '
@@ -14,9 +14,9 @@ parser = argparse.ArgumentParser(description='Train a DBoNW model with given '
 parser.add_argument('model_prefix')
 parser.add_argument('model_dir')
 parser.add_argument('summary_dir')
-parser.add_argument('train_data_set_file',
+parser.add_argument('train_data_set_filename',
                     help='Pickle file of training BowDataSet.')
-parser.add_argument('validation_data_set_file',
+parser.add_argument('validation_data_set_filename',
                     help='Pickle file of validation BowDataSet.')
 parser.add_argument('--n_codewords',
                     type=int,
@@ -45,8 +45,10 @@ args = parser.parse_args()
 
 
 # Load data sets from pkl files
-train_data_set = load_data_set_from_pkl(args.train_data_set_file)
-validation_data_set = load_data_set_from_pkl(args.validation_data_set_file)
+train_data_set =\
+        bow_dataset.DBoWDataSet.load_from_pkl(args.train_data_set_filename)
+validation_data_set =\
+        bow_dataset.DBoWDataSet.load_from_pkl(args.validation_data_set_filename)
 
 # Train the model
 run_training(args.model_prefix, args.model_dir, args.summary_dir,
