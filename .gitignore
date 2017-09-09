@@ -1,5 +1,6 @@
 *.pyc
 
 DBoNW_sample_data/*
+DBoW/dbow/build/
 
 TODO.txt

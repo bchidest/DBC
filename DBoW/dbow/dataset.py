@@ -270,10 +270,10 @@ def normalize_features(features, feature_mean, feature_var):
 
 
 def read_sample(sample_filename, labels_file=[], reference_data_set=[],
-                label='Basal', features_file_suffix=''):
+                label='Basal', features_filename_suffix=''):
     if labels_file:
         labels_df = pd.read_csv(labels_file, delimiter=',', index_col=0)
-        sample_id = (os.path.splitext(os.path.split(sample_filename)[1])[0]).split(features_file_suffix)[0]
+        sample_id = (os.path.splitext(os.path.split(sample_filename)[1])[0]).split(features_filename_suffix)[0]
         if sample_id in labels_df.index:
             if labels_df.loc[sample_id, labels_df.columns[0]] == label:
                 y = 1

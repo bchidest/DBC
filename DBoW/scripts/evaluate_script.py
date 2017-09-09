@@ -1,7 +1,7 @@
 import argparse
 
-from ..run_discriminative_bow import evaluate_on_dataset
-from .. import bow_dataset
+from dbow.run import evaluate_on_dataset
+from dbow import dataset
 
 
 parser = argparse.ArgumentParser(description='Evaluate a DBoNW model with '
@@ -31,9 +31,9 @@ args = parser.parse_args()
 
 # Load data set from pkl files
 data_set =\
-        bow_dataset.DBoWDataSet.load_from_pkl(args.data_set_filename)
+        dataset.DBoWDataSet.load_from_pkl(args.data_set_filename)
 reference_data_set =\
-        bow_dataset.DBoWDataSet.load_from_pkl(args.reference_data_set_filename)
+        dataset.DBoWDataSet.load_from_pkl(args.reference_data_set_filename)
 
 evaluate_on_dataset(args.model_filename, data_set, reference_data_set.max_n_objects,
                     args.n_codewords, args.n_nodes_codeword, args.n_nodes_bow)

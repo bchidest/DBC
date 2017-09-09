@@ -1,8 +1,7 @@
 import argparse
 
-from ..run_discriminative_bow import run_training
-from .. import bow_dataset
-
+from dbow.run import run_training
+from dbow import dataset
 
 parser = argparse.ArgumentParser(description='Train a DBoNW model with given '
                                  'parameters.')
@@ -41,9 +40,9 @@ args = parser.parse_args()
 
 # Load data sets from pkl files
 train_data_set =\
-        bow_dataset.DBoWDataSet.load_from_pkl(args.train_data_set_filename)
+        dataset.DBoWDataSet.load_from_pkl(args.train_data_set_filename)
 validation_data_set =\
-        bow_dataset.DBoWDataSet.load_from_pkl(args.validation_data_set_filename)
+        dataset.DBoWDataSet.load_from_pkl(args.validation_data_set_filename)
 
 # Train the model
 run_training(args.model_prefix, args.model_dir, args.summary_dir,

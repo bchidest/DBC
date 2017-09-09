@@ -13,8 +13,8 @@ import time
 from datetime import datetime
 import cPickle as pkl
 
-import discriminative_bow as dbow
-import bow_dataset
+from . import network
+from . import dataset
 
 
 def fill_feed_dict(data_set, sample_pl, labels_pl, batch_size, zero_pad=0,
@@ -132,30 +132,30 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
         labels_placeholder = tf.placeholder(tf.int32)
 
         with tf.variable_scope("codeword_network") as scope:
-            codewords1 = dbow.codeword_representation(nuclei_placeholder,
+            codewords1 = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
                                                      n_codewords,
                                                      n_nodes_codeword)
-            bow = tf.expand_dims(dbow.bow(codewords1), axis=0)
+            bow = tf.expand_dims(network.bow(codewords1), axis=0)
             scope.reuse_variables()
             for i in range(1, batch_size):
-                codewords = dbow.codeword_representation(nuclei_placeholder,
+                codewords = network.codeword_representation(nuclei_placeholder,
                                                          i,
                                                          n_features,
                                                          n_codewords,
                                                          n_nodes_codeword)
-                bow = tf.concat([bow, tf.expand_dims(dbow.bow(codewords), axis=0)], axis=0)
+                bow = tf.concat([bow, tf.expand_dims(network.bow(codewords), axis=0)], axis=0)
         # Normalize BOW by maximum number of objects for any sample
         bow = bow / float(train.max_n_objects)
         with tf.name_scope('bow'):
             tf.summary.histogram('activations', bow)
         with tf.variable_scope("bow_classifier") as scope:
-            logits = dbow.bow_classifier(bow, train.n_labels,
+            logits = network.bow_classifier(bow, train.n_labels,
                                          n_codewords, n_nodes_bow)
-            #logits = dbow.bow_classifier_simple_2_class(bow)
-        loss = dbow.loss(logits, labels_placeholder)
-        train_op = dbow.training(loss, global_step, learning_rate)
+            #logits = network.bow_classifier_simple_2_class(bow)
+        loss = network.loss(logits, labels_placeholder)
+        train_op = network.training(loss, global_step, learning_rate)
 
         saver = tf.train.Saver(max_to_keep=0)
         summary_op = tf.summary.merge_all()
@@ -246,24 +246,24 @@ def predict_samples(model_filename, samples, max_n_objects,
     with tf.Graph().as_default():
         nuclei_placeholder = [tf.placeholder(tf.float32) for _ in range(n_samples)]
         with tf.variable_scope("codeword_network") as scope:
-            codewords1 = dbow.codeword_representation(nuclei_placeholder,
+            codewords1 = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
                                                      n_codewords,
                                                      n_nodes_codeword)
-            bow = tf.expand_dims(dbow.bow(codewords1), axis=0)
+            bow = tf.expand_dims(network.bow(codewords1), axis=0)
             scope.reuse_variables()
             for i in range(1, n_samples):
-                codewords = dbow.codeword_representation(nuclei_placeholder,
+                codewords = network.codeword_representation(nuclei_placeholder,
                                                          i,
                                                          n_features,
                                                          n_codewords,
                                                          n_nodes_codeword)
-                bow = tf.concat([bow, tf.expand_dims(dbow.bow(codewords), axis=0)], axis=0)
+                bow = tf.concat([bow, tf.expand_dims(network.bow(codewords), axis=0)], axis=0)
         # Normalize BOW by maximum number of objects for any sample
         bow = bow / float(max_n_objects)
         with tf.variable_scope("bow_classifier") as scope:
-            logits = dbow.bow_classifier(bow, n_labels,
+            logits = network.bow_classifier(bow, n_labels,
                                          n_codewords, n_nodes_bow)
         saver = tf.train.Saver()
         sess = tf.Session()
@@ -287,24 +287,24 @@ def evaluate_on_dataset(model_filename, data_set, max_n_objects,
         nuclei_placeholder = [tf.placeholder(tf.float32) for _ in range(batch_size)]
         labels_placeholder = tf.placeholder(tf.int32)
         with tf.variable_scope("codeword_network") as scope:
-            codewords1 = dbow.codeword_representation(nuclei_placeholder,
+            codewords1 = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
                                                      n_codewords,
                                                      n_nodes_codeword)
-            bow = tf.expand_dims(dbow.bow(codewords1), axis=0)
+            bow = tf.expand_dims(network.bow(codewords1), axis=0)
             scope.reuse_variables()
             for i in range(1, batch_size):
-                codewords = dbow.codeword_representation(nuclei_placeholder,
+                codewords = network.codeword_representation(nuclei_placeholder,
                                                          i,
                                                          n_features,
                                                          n_codewords,
                                                          n_nodes_codeword)
-                bow = tf.concat([bow, tf.expand_dims(dbow.bow(codewords), axis=0)], axis=0)
+                bow = tf.concat([bow, tf.expand_dims(network.bow(codewords), axis=0)], axis=0)
         # Normalize BOW by maximum number of objects for any sample
         bow = bow / float(max_n_objects)
         with tf.variable_scope("bow_classifier") as scope:
-            logits = dbow.bow_classifier(bow, data_set.n_labels,
+            logits = network.bow_classifier(bow, data_set.n_labels,
                                          n_codewords, n_nodes_bow)
         saver = tf.train.Saver()
         sess = tf.Session()
@@ -374,16 +374,16 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
         nuclei_placeholder = [tf.placeholder(tf.float32)]
         labels_placeholder = tf.placeholder(tf.int32)
         with tf.variable_scope("codeword_network") as scope:
-            codewords = dbow.codeword_representation(nuclei_placeholder,
+            codewords = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
                                                      n_codewords,
                                                      n_nodes_codeword)
-            bow = tf.expand_dims(dbow.bow(codewords), axis=0)
+            bow = tf.expand_dims(network.bow(codewords), axis=0)
             bow = bow / float(max_n_objects)
         with tf.variable_scope("bow_classifier") as scope:
             # Normalize BOW by maximum number of objects for any sample
-            logits = dbow.bow_classifier(bow, data_set.n_labels,
+            logits = network.bow_classifier(bow, data_set.n_labels,
                                          n_codewords, n_nodes_bow)
         saver = tf.train.Saver()
         sess = tf.Session()
@@ -525,7 +525,7 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
 def run_fake_network(batch_size=30):
     random.seed(33)
 
-    train, test = bow_dataset.load_fake_data_sets()
+    train, test = dataset.load_fake_data_sets()
     n_features = train.n_features
     print("Number of training patients = ("
           + str(train.n_samples_per_label[0]) + ", "
@@ -537,18 +537,18 @@ def run_fake_network(batch_size=30):
         nuclei_placeholder = [tf.placeholder(tf.float32) for _ in range(batch_size)]
         labels_placeholder = tf.placeholder(tf.int32)
 
-        codewords = dbow.codeword_representation_fake(nuclei_placeholder,
+        codewords = network.codeword_representation_fake(nuclei_placeholder,
                                                       0,
                                                       n_features,
                                                       0.3, 0.6)
-        bow = tf.expand_dims(dbow.bow(codewords), axis=0)
+        bow = tf.expand_dims(network.bow(codewords), axis=0)
         for i in range(1, batch_size):
-            codewords = dbow.codeword_representation_fake(nuclei_placeholder,
+            codewords = network.codeword_representation_fake(nuclei_placeholder,
                                                           i,
                                                           n_features,
                                                           0.3, 0.6)
-            bow = tf.concat([bow, tf.expand_dims(dbow.bow(codewords), axis=0)], axis=0)
-        logits = dbow.bow_classifier_fake(bow)
+            bow = tf.concat([bow, tf.expand_dims(network.bow(codewords), axis=0)], axis=0)
+        logits = network.bow_classifier_fake(bow)
         sess = tf.Session()
 
         for i in range(6):
