@@ -12,6 +12,10 @@ python setup.py install
 ```
 from the command line from within the 'DBoW' folder. If you are installing globally, remember to use `sudo`.
 
+### Requirements
+
+Python libraries: numpy; pandas; tensorflow; opencv; matplotlib
+
 ## Preprocessing CellProfiler Features
 
 This tool pairs particularly well with CellProfiler (http://cellprofiler.org/). CellProfiler can be used to first extract features of cells and nuclei from cellular images and DBoNW can then be used to predict image-level variables from the extracted features of each cell and/or nucleus.
