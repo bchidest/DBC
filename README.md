@@ -12,6 +12,12 @@ python setup.py install
 ```
 from the command line from within the 'DBoW' folder. If you are installing globally, remember to use `sudo`.
 
+## Preprocessing CellProfiler Features
+
+This tool pairs particularly well with CellProfiler (http://cellprofiler.org/). CellProfiler can be used to first extract features of cells and nuclei from cellular images and DBoNW can then be used to predict image-level variables from the extracted features of each cell and/or nucleus.
+
+In order to use features from CellProfiler, it is likely that some preprocessing is needed before using DBoNW. In particular, the CSV files created by CellProfiler may contain unnecessary columns (such as Image or Object ID) and some features, such as those of texture and intensity distribution, need to be made invariant to orientation, either by using instead their average or maximum value. The function `feature_set_modication()` in `preprocessing.py` in DBoW will load a list of features to keep, to average, and to maximize from three respective files and save the resulting features in new CSV files in a separate directory. Examples of such files are found in the 'cell\_profiler' directory.
+
 ## Diagnosing Basal Subtype in TCGA-BRCA Patients
 
 See 'example\_predict\_script.sh' for an example python script that predicts the subtype (Basal or non-Basal) of a sample TCGA-BRCA patient.
