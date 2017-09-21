@@ -3,13 +3,15 @@ from . import dataset
 
 
 class DBoWPredictor(object):
-    def __init__(self, model_filename, reference_data_set, labels_filename=[],
-                 label_names=[], features_filename_suffix=[]):
+    def __init__(self, model_filename, reference_data_set,
+                 param_filename, labels_filename=[], label_names=[],
+                 features_filename_suffix=[]):
         '''
         Class to store a BoW data set.
         '''
         self.model_filename = model_filename
         self.reference_data_set = reference_data_set
+        self.param_filename = param_filename
         self.labels_filename = labels_filename
         self.label_names = label_names
         self.features_filename_suffix = features_filename_suffix
@@ -31,7 +33,8 @@ class DBoWPredictor(object):
     def predict_raw(self, sample):
         y_hat = run.predict_samples(self.model_filename,
                                     [sample],
-                                    self.reference_data_set.max_n_objects)
+                                    self.reference_data_set.max_n_objects,
+                                    self.param_filename)
         if self.label_names:
             label_hat = [self.label_names[y] for y in y_hat]
             return y_hat[0], label_hat[0]

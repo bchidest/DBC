@@ -112,11 +112,14 @@ def do_eval(sess,
     return([accuracy, f1, precision, recall, specificity, fpr])
 
 
-def run_training(filename_prefix, model_dir, summary_dir, train,
-                 validate,
-                 n_codewords=8, n_nodes_codeword=[25, 15], n_nodes_bow=6,
-                 learning_rate=0.001, max_steps=5000,
-                 batch_size=30):
+def run_training(param_filename, model_dir, summary_dir, train,
+                 validate, model_prefix=''):
+
+    if model_prefix == '':
+        filename_prefix = os.path.split(os.path.splitext(param_filename)[0])[1]
+    else:
+        filename_prefix = model_prefix
+    params = network.DBoWParams.load_from_file(param_filename)
 
     n_features = train.n_features
     print("Number of training patients = ("
@@ -128,23 +131,23 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
 
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
-        nuclei_placeholder = [tf.placeholder(tf.float32) for _ in range(batch_size)]
+        nuclei_placeholder = [tf.placeholder(tf.float32) for _ in range(params.batch_size)]
         labels_placeholder = tf.placeholder(tf.int32)
 
         with tf.variable_scope("codeword_network") as scope:
             codewords1 = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
-                                                     n_codewords,
-                                                     n_nodes_codeword)
+                                                     params.n_codewords,
+                                                     params.n_nodes_codeword)
             bow = tf.expand_dims(network.bow(codewords1), axis=0)
             scope.reuse_variables()
-            for i in range(1, batch_size):
+            for i in range(1, params.batch_size):
                 codewords = network.codeword_representation(nuclei_placeholder,
                                                          i,
                                                          n_features,
-                                                         n_codewords,
-                                                         n_nodes_codeword)
+                                                         params.n_codewords,
+                                                         params.n_nodes_codeword)
                 bow = tf.concat([bow, tf.expand_dims(network.bow(codewords), axis=0)], axis=0)
         # Normalize BOW by maximum number of objects for any sample
         bow = bow / float(train.max_n_objects)
@@ -152,10 +155,10 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
             tf.summary.histogram('activations', bow)
         with tf.variable_scope("bow_classifier") as scope:
             logits = network.bow_classifier(bow, train.n_labels,
-                                         n_codewords, n_nodes_bow)
+                                         params.n_codewords, params.n_nodes_bow)
             #logits = network.bow_classifier_simple_2_class(bow)
         loss = network.loss(logits, labels_placeholder)
-        train_op = network.training(loss, global_step, learning_rate)
+        train_op = network.training(loss, global_step, params.learning_rate)
 
         saver = tf.train.Saver(max_to_keep=0)
         summary_op = tf.summary.merge_all()
@@ -167,12 +170,12 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
                 os.path.join(summary_dir, filename_prefix),
                 sess.graph)
 
-        for step in xrange(max_steps):
+        for step in xrange(params.max_steps):
             start_time = time.time()
             feed_dict = fill_feed_dict(train,
                                        nuclei_placeholder,
                                        labels_placeholder,
-                                       batch_size)
+                                       params.batch_size)
             _, loss_value = sess.run([train_op, loss], feed_dict=feed_dict)
 
             duration = time.time() - start_time
@@ -183,7 +186,7 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
                 return
 
             if (step + 1) % 2 == 0:
-                num_examples_per_step = batch_size
+                num_examples_per_step = params.batch_size
                 examples_per_sec = num_examples_per_step / duration
                 sec_per_batch = float(duration)
 
@@ -196,7 +199,7 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
                 summary_writer.add_summary(summary_str, step)
 
             # Save a checkpoint and evaluate the model periodically.
-            if (step + 1) % 10 == 0 or (step + 1) == max_steps:
+            if (step + 1) % 10 == 0 or (step + 1) == params.max_steps:
                 # Evaluate against the validation set.
                 print('Train Data Eval:')
                 do_eval(sess,
@@ -204,9 +207,9 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
                         nuclei_placeholder,
                         labels_placeholder,
                         train,
-                        batch_size)
+                        params.batch_size)
                 print("Step: " + str(step))
-            if (step + 1) % 10 == 0 or (step + 1) == max_steps:
+            if (step + 1) % 10 == 0 or (step + 1) == params.max_steps:
                 # Evaluate against the training set.
                 print('Validate Data Eval:')
                 do_eval(sess,
@@ -214,13 +217,13 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
                         nuclei_placeholder,
                         labels_placeholder,
                         validate,
-                        batch_size)
+                        params.batch_size)
                 print("Step: " + str(step))
-            if (step + 1) % 20 == 0 or (step + 1) == max_steps:
+            if (step + 1) % 20 == 0 or (step + 1) == params.max_steps:
                 saver.save(sess, os.path.join(model_dir, filename_prefix),
                            global_step=step)
 
-            if (step + 1) % 100 == 0 or (step + 1) == max_steps:
+            if (step + 1) % 100 == 0 or (step + 1) == params.max_steps:
                 bow_eval, y = sess.run([bow, logits], feed_dict=feed_dict)
                 c_eval = sess.run(codewords1, feed_dict=feed_dict)
                 print("Example Codewords Representations:")
@@ -233,15 +236,14 @@ def run_training(filename_prefix, model_dir, summary_dir, train,
 
 
 def predict_samples(model_filename, samples, max_n_objects,
-                    n_codewords=8, n_nodes_codeword=[25, 15],
-                    n_nodes_bow=6,
-                    threshold_offset=0.0,
+                    param_filename, threshold_offset=0.0,
                     n_labels=2):
     '''
     samples : list of numpy.arrays
     '''
     n_samples = len(samples)
     n_features = samples[0].shape[1]
+    params = network.DBoWParams.load_from_file(param_filename)
 
     with tf.Graph().as_default():
         nuclei_placeholder = [tf.placeholder(tf.float32) for _ in range(n_samples)]
@@ -249,22 +251,23 @@ def predict_samples(model_filename, samples, max_n_objects,
             codewords1 = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
-                                                     n_codewords,
-                                                     n_nodes_codeword)
+                                                     params.n_codewords,
+                                                     params.n_nodes_codeword)
             bow = tf.expand_dims(network.bow(codewords1), axis=0)
             scope.reuse_variables()
             for i in range(1, n_samples):
                 codewords = network.codeword_representation(nuclei_placeholder,
                                                          i,
                                                          n_features,
-                                                         n_codewords,
-                                                         n_nodes_codeword)
+                                                         params.n_codewords,
+                                                         params.n_nodes_codeword)
                 bow = tf.concat([bow, tf.expand_dims(network.bow(codewords), axis=0)], axis=0)
         # Normalize BOW by maximum number of objects for any sample
         bow = bow / float(max_n_objects)
         with tf.variable_scope("bow_classifier") as scope:
             logits = network.bow_classifier(bow, n_labels,
-                                         n_codewords, n_nodes_bow)
+                                            params.n_codewords,
+                                            params.n_nodes_bow)
         saver = tf.train.Saver()
         sess = tf.Session()
         saver.restore(sess, model_filename)
@@ -275,10 +278,10 @@ def predict_samples(model_filename, samples, max_n_objects,
 
 
 def evaluate_on_dataset(model_filename, data_set, max_n_objects,
-                        n_codewords=8, n_nodes_codeword=[25, 15],
-                        n_nodes_bow=6, batch_size=30, repeats=False,
+                        param_filename, batch_size=30, repeats=False,
                         threshold_offset=0.0):
     n_features = data_set.n_features
+    params = network.DBoWParams.load_from_file(param_filename)
     print("Number of samples = ("
           + str(data_set.n_samples_per_label[0]) + ", "
           + str(data_set.n_samples_per_label[1]) + ")")
@@ -290,22 +293,22 @@ def evaluate_on_dataset(model_filename, data_set, max_n_objects,
             codewords1 = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
-                                                     n_codewords,
-                                                     n_nodes_codeword)
+                                                     params.n_codewords,
+                                                     params.n_nodes_codeword)
             bow = tf.expand_dims(network.bow(codewords1), axis=0)
             scope.reuse_variables()
             for i in range(1, batch_size):
                 codewords = network.codeword_representation(nuclei_placeholder,
                                                          i,
                                                          n_features,
-                                                         n_codewords,
-                                                         n_nodes_codeword)
+                                                         params.n_codewords,
+                                                         params.n_nodes_codeword)
                 bow = tf.concat([bow, tf.expand_dims(network.bow(codewords), axis=0)], axis=0)
         # Normalize BOW by maximum number of objects for any sample
         bow = bow / float(max_n_objects)
         with tf.variable_scope("bow_classifier") as scope:
             logits = network.bow_classifier(bow, data_set.n_labels,
-                                         n_codewords, n_nodes_bow)
+                                         params.n_codewords, params.n_nodes_bow)
         saver = tf.train.Saver()
         sess = tf.Session()
         saver.restore(sess, model_filename)
@@ -321,18 +324,18 @@ def evaluate_on_dataset(model_filename, data_set, max_n_objects,
 
 
 def evaluate_ROC(model_filename, data_set, max_n_objects,
-                 output_dir='./',
-                 n_codewords=8, n_nodes_codeword=[25, 15],
-                 n_nodes_bow=6, batch_size=30, repeats=False,
+                 param_filename, output_dir='./',
+                 batch_size=30, repeats=False,
                  thresholds=[-1.0, 0.0, 1.0]):
 
+    params = network.DBoWParams.load_from_file(param_filename)
     tpr = [0.0]
     fpr = [0.0]
     for t in thresholds:
         metrics = evaluate_on_dataset(model_filename, data_set, max_n_objects,
-                                      n_codewords=n_codewords,
-                                      n_nodes_codeword=n_nodes_codeword,
-                                      n_nodes_bow=n_nodes_bow,
+                                      n_codewords=params.n_codewords,
+                                      n_nodes_codeword=params.n_nodes_codeword,
+                                      n_nodes_bow=params.n_nodes_bow,
                                       batch_size=batch_size, repeats=repeats,
                                       threshold_offset=t)
         tpr.append(metrics[3])
@@ -356,18 +359,19 @@ def evaluate_ROC(model_filename, data_set, max_n_objects,
     fig.clf()
 
 
-def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects,
-                               n_codewords=8, n_nodes_codeword=[25, 15],
-                               n_nodes_bow=6, n_example_nuclei_per_sample=5,
+def generate_example_codewords(data_dir, model_filename, data_set,
+                               max_n_objects, param_filename,
+                               n_example_nuclei_per_sample=5,
                                n_example_nuclei=10, n_example_bow_per_label=5,
                                save_data=False):
     n_features = data_set.n_features
+    params = network.DBoWParams.load_from_file(param_filename)
     print("Number of patients = ("
           + str(data_set.n_samples_per_label[0]) + ", "
           + str(data_set.n_samples_per_label[1]) + ")")
 
     max_codeword_count = 0
-    bow_dataset = np.zeros((data_set.num_examples, n_codewords), dtype='float32')
+    bow_dataset = np.zeros((data_set.num_examples, params.n_codewords), dtype='float32')
     labels_ind = [[], []]
     y_hat = np.zeros((data_set.num_examples,), dtype='uint8')
     with tf.Graph().as_default():
@@ -377,18 +381,18 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
             codewords = network.codeword_representation(nuclei_placeholder,
                                                      0,
                                                      n_features,
-                                                     n_codewords,
-                                                     n_nodes_codeword)
+                                                     params.n_codewords,
+                                                     params.n_nodes_codeword)
             bow = tf.expand_dims(network.bow(codewords), axis=0)
             bow = bow / float(max_n_objects)
         with tf.variable_scope("bow_classifier") as scope:
             # Normalize BOW by maximum number of objects for any sample
             logits = network.bow_classifier(bow, data_set.n_labels,
-                                         n_codewords, n_nodes_bow)
+                                         params.n_codewords, params.n_nodes_bow)
         saver = tf.train.Saver()
         sess = tf.Session()
         saver.restore(sess, model_filename)
-        nuclei = [[] for _ in range(n_codewords)]
+        nuclei = [[] for _ in range(params.n_codewords)]
         for i in range(data_set.num_examples):
             feed_dict = fill_feed_dict(data_set,
                                        nuclei_placeholder,
@@ -398,7 +402,7 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
             logits_eval, bow_dataset[i, :], codewords_eval =\
                 sess.run([logits, bow, codewords], feed_dict=feed_dict)
             codeword_ind = np.argmax(codewords_eval, axis=1)
-            for k in range(n_codewords):
+            for k in range(params.n_codewords):
                 nuclei_ind = np.where(codeword_ind == k)[0]
                 if len(nuclei_ind) > n_example_nuclei_per_sample:
                     nuclei_ind = random.sample(nuclei_ind, n_example_nuclei_per_sample)
@@ -422,7 +426,7 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
     pids = []
     pids.append([data_set.pids[labels_ind[0][i]] for i in range(n_example_bow_per_label)])
     pids.append([data_set.pids[labels_ind[1][i]] for i in range(n_example_bow_per_label)])
-    for k in range(n_codewords):
+    for k in range(params.n_codewords):
         if nuclei[k]:
             if len(nuclei[k]) > n_example_nuclei:
                 perm = range(len(nuclei[k]))
@@ -450,14 +454,14 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
     colors = [(255, 139, 139), (139, 139, 255)]
     for i in range(n_example_bow_per_label):
         for j in range(2):
-            pos = np.arange(n_codewords) + 0.5
+            pos = np.arange(params.n_codewords) + 0.5
             axarr[i, 3*j+1].bar(pos, bow_out[j][i, :], align='center')
             axarr[i, 3*j+1].set_ylim([0.0, max_codeword_count])
             axarr[i, 3*j+1].set_yticks(list(np.arange(0, max_codeword_count + 0.05, 0.05)))
             axarr[i, 3*j+1].set_yticklabels(['0.00'] + ['']*(int(100*max_codeword_count)/5-1)
                     + ['%.2f' % max_codeword_count], fontsize=8)
             axarr[i, 3*j+1].set_xticks(pos)
-            axarr[i, 3*j+1].set_xticklabels(range(1, n_codewords + 1), fontsize=8)
+            axarr[i, 3*j+1].set_xticklabels(range(1, params.n_codewords + 1), fontsize=8)
             patch_full_filename = os.path.join('/home/ben/datasets/Nuclei_features/TCGA_BRCA/images/bchidest_tmp/drive_1/TCGA_15_patches', pids[j][i]+'*DX1*', 'patch*.png')
             patch_full_filename = glob(patch_full_filename)[0]
             patch_image = np.array(Image.open(patch_full_filename))[1250:1750, 1250:1750]
@@ -485,7 +489,7 @@ def generate_example_codewords(data_dir, model_filename, data_set, max_n_objects
     # Plot example nuclei codewords
     n_i = 5
     n_j = int(np.ceil(n_example_nuclei / n_i))
-    for k in range(n_codewords):
+    for k in range(params.n_codewords):
         fig = plt.figure()
         for i in range(len(nuclei_out[k])):
             plt_i = i % n_i

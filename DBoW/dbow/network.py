@@ -1,6 +1,41 @@
 import tensorflow as tf
 
 
+class DBoWParams(object):
+    def __init__(self, n_codewords=8, n_nodes_codeword=[25, 15],
+                 n_nodes_bow=6, learning_rate=0.001, max_steps=5000,
+                 batch_size=30):
+        self.n_codewords = n_codewords
+        self.n_nodes_codeword = n_nodes_codeword
+        self.n_nodes_bow = n_nodes_bow
+        self.learning_rate = learning_rate
+        self.max_steps = max_steps
+        self.batch_size = batch_size
+
+    @classmethod
+    def load_from_file(cls, param_filename):
+        '''
+        Example format:
+        n_codewords
+        n_nodes_codeword
+        n_nodes_bow
+        learning_rate
+        max_steps
+        batch_size
+        '''
+        f_param = open(param_filename, 'r')
+        n_codewords = int(f_param.readline())
+        string_temp = f_param.readline().split(',')
+        n_nodes_codeword = [int(s) for s in string_temp]
+        n_nodes_bow = int(f_param.readline())
+        learning_rate = float(f_param.readline())
+        max_steps = int(f_param.readline())
+        batch_size = int(f_param.readline())
+        dbow_params = cls(n_codewords, n_nodes_codeword, n_nodes_bow,
+                          learning_rate, max_steps, batch_size)
+        return dbow_params
+
+
 def variable_summaries(var, name):
     mean = tf.reduce_mean(var)
     tf.summary.scalar('mean/' + name, mean)
